@@ -1,0 +1,22 @@
+{
+    "autoload": {
+        "psr-4": {
+            "StudyPortals\\GetOnBoard\\": [
+                "src/"
+            ],
+            "App\\": [
+                "app/"
+            ]
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "StudyPortals\\GetOnBoard\\": [
+                "tests/"
+            ]
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^7.5"
+    }
+}
