@@ -9,7 +9,7 @@ use InvalidArgumentException;
 class BillItem
 {
     private float $price;
-    private string $paidBy;
+    private string $creditor;
     private array $debtByAttendee = [];
 
     public function __construct(string $row)
@@ -21,7 +21,7 @@ class BillItem
         }
 
         $this->setPrice((float)$lunchBillLine[0]);
-        $this->setPaidBy($lunchBillLine[1]);
+        $this->setCreditor($lunchBillLine[1]);
         $this->setAttendees($lunchBillLine[2]);
     }
 
@@ -30,9 +30,9 @@ class BillItem
         return $this->price;
     }
 
-    public function getPaidBy(): string
+    public function getCreditor(): string
     {
-        return $this->paidBy;
+        return $this->creditor;
     }
 
     public function getDebtByAttendee(): array
@@ -45,9 +45,9 @@ class BillItem
         $this->price = $price;
     }
 
-    private function setPaidBy(string $paid_by): void
+    private function setCreditor(string $paid_by): void
     {
-        $this->paidBy = strtolower($paid_by);
+        $this->creditor = strtolower($paid_by);
     }
 
     private function setAttendees(string $attendees): void
@@ -58,7 +58,7 @@ class BillItem
     private function mapDebtByAttendee(string $attendees):array
     {
         $attendees = explode(',', strtolower($attendees));
-        $creditor = $this->getPaidBy();
+        $creditor = $this->getCreditor();
         $debt = $this->getPrice() / count($attendees);
 
         $keys = array_diff($attendees, [$creditor]);

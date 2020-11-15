@@ -9,8 +9,11 @@ use StudyPortals\GetOnBoard\Repository\BillsStaticRepositoryInterface;
 
 class Calculator implements CalculatorInterface
 {
+    private const CREDITOR = 'CREDITOR';
+    private const DEBTOR = 'DEBTOR';
+    private const DEBT = 'DEBT';
+
     private array $bills = [];
-    private array $paymentMatrix = [];
 
     public function __construct(BillsStaticRepositoryInterface $billsStaticRepository)
     {
@@ -39,42 +42,53 @@ class Calculator implements CalculatorInterface
 
     private function calculate(): array
     {
+        $paymentMatrix = [];
+
         foreach ($this->bills as $billItem) {
-            $creditor = $billItem->getPaidBy();
-            $this->setPaymentMatrix($creditor, $billItem->getDebtByAttendee());
+            $this->setPaymentMatrix($billItem, $paymentMatrix);
         }
-        return $this->paymentMatrix;
+        return $paymentMatrix;
     }
 
-    private function setPaymentMatrix(string $creditor, array $debtByAttendee): void
+    private function setPaymentMatrix(BillItem $billItem, array &$paymentMatrix): void
     {
-        foreach ($debtByAttendee as $debtorKey => $debt) {
-            $debtorDebt = $debt[$creditor];
+        $creditor = $billItem->getCreditor();
 
-            if (isset($this->paymentMatrix[$creditor][$debtorKey])) {
-                $debtorDebt = $this->getCreditorDebt($creditor, $debtorKey, $debtorDebt);
+        foreach ($billItem->getDebtByAttendee() as $debtorKey => $debt) {
+            $debtCell = [self::DEBTOR => $debtorKey, self::CREDITOR => $creditor, self::DEBT => $debt[$creditor]];
+
+            if (isset($paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]])) {
+
+                $debtCell[self::DEBT] = $this->getCreditorDebt($debtCell, $paymentMatrix);
             }
 
-            if (isset($this->paymentMatrix[$debtorKey][$creditor])) {
-                $this->paymentMatrix[$debtorKey][$creditor] += $debtorDebt;
+            if (isset($paymentMatrix[$debtorKey][$creditor])) {
+                $paymentMatrix[$debtCell[self::DEBTOR]][$debtCell[self::CREDITOR]] += $debtCell[self::DEBT];
                 continue;
             }
 
-            if ($debtorDebt > 0) {
-                $this->paymentMatrix = array_merge_recursive($this->paymentMatrix, [$debtorKey => [$creditor => $debtorDebt]]);
+            if ($debtCell[self::DEBT] > 0) {
+                $paymentMatrix = array_merge_recursive($paymentMatrix, [$debtCell[self::DEBTOR] => [$debtCell[self::CREDITOR] => $debtCell[self::DEBT]]]);
             }
         }
     }
 
-    private function getCreditorDebt(string $creditor, string $debtorKey, float $debtorDebt): float
+    private function getCreditorDebt(array $debtCell, array &$paymentMatrix): float
     {
-        $debtorDebt = $debtorDebt - $this->paymentMatrix[$creditor][$debtorKey];
+        $debtorDebt = $debtCell[self::DEBT] - $paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]];
         if ($debtorDebt > 0) {
-            unset($this->paymentMatrix[$creditor][$debtorKey]);
+            unset($paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]]);
             return $debtorDebt;
         }
-        $this->paymentMatrix[$creditor][$debtorKey] = abs($debtorDebt);
+        $paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]] = abs($debtorDebt);
 
         return $debtorDebt;
+    }
+
+    private function getDebtReconciliation(array &$paymentMatrix): void
+    {
+        foreach ($paymentMatrix as $debtor) {
+            if($debtor)
+        }
     }
 }
