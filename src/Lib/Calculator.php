@@ -14,6 +14,7 @@ class Calculator implements CalculatorInterface
     private const CREDITOR = 'CREDITOR';
     private const DEBTOR = 'DEBTOR';
     private const DEBT = 'DEBT';
+    private const REMOVE_CELL = 'REMOVE_CELL';
     private bool $reconcileDebt = false;
 
     /**
@@ -52,8 +53,8 @@ class Calculator implements CalculatorInterface
 
             $paymentMatrix = array_filter($paymentMatrix);
 
-            if ($this->reconcileDebt) {
-                $this->getTotalDebtReconciliation($paymentMatrix);
+            if ($this->isReconcileDebt()) {
+                $this->setTotalDebtReconciliation($paymentMatrix);
             }
             return $paymentMatrix;
         } catch (TypeError|Exception $exception) {
@@ -73,7 +74,17 @@ class Calculator implements CalculatorInterface
 
             if (isset($paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]])) {
 
-                $debtCell[self::DEBT] = $this->getCreditorDebt($debtCell, $paymentMatrix);
+                $debtCell[self::DEBT] = $debt[$creditor] - $paymentMatrix[$creditor][$currentDebtorKey];
+
+                $this->updatePaymentMatrixCell(
+                    [
+                        self::DEBTOR => $creditor,
+                        self::CREDITOR => $currentDebtorKey,
+                        self::DEBT => $debtCell[self::DEBT],
+                        self::REMOVE_CELL => $debtCell[self::DEBT] > 0
+                    ],
+                    $paymentMatrix
+                );
             }
 
             if (isset($paymentMatrix[$currentDebtorKey][$creditor])) {
@@ -82,28 +93,29 @@ class Calculator implements CalculatorInterface
             }
 
             if ($debtCell[self::DEBT] > 0) {
-                $paymentMatrix = array_merge_recursive($paymentMatrix, [$debtCell[self::DEBTOR] => [$debtCell[self::CREDITOR] => $debtCell[self::DEBT]]]);
+                $paymentMatrix = array_merge_recursive(
+                    $paymentMatrix,
+                    [
+                        $debtCell[self::DEBTOR] => [$debtCell[self::CREDITOR] => $debtCell[self::DEBT]]
+                    ]
+                );
             }
         }
     }
 
-    private function getCreditorDebt(array $debtCell, array &$paymentMatrix): float
-    {
-        $debtorDebt = $debtCell[self::DEBT] - $paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]];
-        if ($debtorDebt > 0) {
-            unset($paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]]);
-            return $debtorDebt;
-        }
-        $paymentMatrix[$debtCell[self::CREDITOR]][$debtCell[self::DEBTOR]] = abs($debtorDebt);
-
-        return $debtorDebt;
-    }
-
-    private function getTotalDebtReconciliation(array &$paymentMatrix): void
+    private function setTotalDebtReconciliation(array &$paymentMatrix): void
     {
         foreach ($paymentMatrix as $currentDebtorKey => $debt) {
             $creditor = key($debt);
-            $searchMatrix = $this->getSearchMatrix([self::DEBTOR => $currentDebtorKey, self::CREDITOR => $creditor, self::DEBT => $debt], $paymentMatrix);
+            $searchMatrix = $this->getSearchMatrix(
+                [
+                    self::DEBTOR => $currentDebtorKey,
+                    self::CREDITOR => $creditor,
+                    self::DEBT => $debt
+                ],
+                $paymentMatrix
+            );
+
             $commonDebtor = $this->filterCommonDebtor($searchMatrix, $creditor);
 
             if (count($commonDebtor) === 0) {
@@ -112,19 +124,26 @@ class Calculator implements CalculatorInterface
 
             $debtDifference = $paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]] - $commonDebtor[self::DEBT];
 
-            $paymentMatrix[$currentDebtorKey][$creditor] += $debtDifference > 0 ? $commonDebtor[self::DEBT] : $paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]];
+            $paymentMatrix[$currentDebtorKey][$creditor] +=
+                $debtDifference > 0 ? $commonDebtor[self::DEBT] : $paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]];
 
-            $paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]] = $debtDifference > 0 ? $debtDifference : 0;
+            $debtCell = [
+                self::DEBTOR => $currentDebtorKey,
+                self::CREDITOR => $commonDebtor[self::DEBTOR],
+                self::DEBT => $debtDifference,
+                self::REMOVE_CELL => $debtDifference <= 0
+            ];
 
-            if ($paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]] === 0) {
-                unset($paymentMatrix[$currentDebtorKey][$commonDebtor[self::DEBTOR]]);
-            }
+            $this->updatePaymentMatrixCell($debtCell, $paymentMatrix);
 
-            $paymentMatrix[$commonDebtor[self::DEBTOR]][$creditor] = $debtDifference < 0 ? abs($debtDifference) : 0;
+            $debtCell = [
+                self::DEBTOR => $commonDebtor[self::DEBTOR],
+                self::CREDITOR => $creditor,
+                self::DEBT => $debtDifference,
+                self::REMOVE_CELL => $debtDifference >= 0
+            ];
 
-            if ($paymentMatrix[$commonDebtor[self::DEBTOR]][$creditor] === 0) {
-                unset($paymentMatrix[$commonDebtor[self::DEBTOR]][$creditor]);
-            }
+            $this->updatePaymentMatrixCell($debtCell, $paymentMatrix);
         }
     }
 
@@ -148,12 +167,21 @@ class Calculator implements CalculatorInterface
         return array_intersect_key($excludeSelfMatrix, $creditors);
     }
 
+    private function updatePaymentMatrixCell(array $debtCell, array &$paymentMatrix): void
+    {
+        if ($debtCell[self::REMOVE_CELL]) {
+            unset($paymentMatrix[$debtCell[self::DEBTOR]][$debtCell[self::CREDITOR]]);
+            return;
+        }
+        $paymentMatrix[$debtCell[self::DEBTOR]][$debtCell[self::CREDITOR]] = abs($debtCell[self::DEBT]);
+    }
+
     public function setReconcileDebt(bool $reconcileDebt): void
     {
         $this->reconcileDebt = $reconcileDebt;
     }
 
-    public function isReconcileDebt(): bool
+    private function isReconcileDebt(): bool
     {
         return $this->reconcileDebt;
     }
